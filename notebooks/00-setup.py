@@ -52,7 +52,9 @@ mlflow_experiment_path = f"/Shared/Mlflow_{use_case_name}"
 
 # Create database to house feature tables
 _ = spark.sql(f"CREATE DATABASE IF NOT EXISTS {feature_store_database_name}")
-
+#fs.drop_table(
+#                name=feature_store_table
+#            )
 # COMMAND ----------
 
 # MAGIC %md
