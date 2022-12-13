@@ -1,0 +1,76 @@
+custom:
+
+  # Cluster configs for each environment
+  default-cluster-spec: &default-cluster-spec
+    spark_version: '11.3.x-cpu-ml-scala2.12'
+    node_type_id: 'i3.xlarge' # NOTE: this is an AWS-specific instance type. Change accordingly if running on Azure or GCP.
+    driver_node_type_id: 'i3.xlarge'  # NOTE: this is an AWS-specific instance type. Change accordingly if running on Azure or GCP.
+    num_workers: 1
+    # To reduce start up time for each job, it is advisable to use a cluster pool. To do so involves supplying the following
+    # two fields with a pool_id to acquire both the driver and instances from.
+    # If driver_instance_pool_id and instance_pool_id are set, both node_type_id and driver_node_type_id CANNOT be supplied.
+    # As such, if providing a pool_id for driver and worker instances, please ensure that node_type_id and driver_node_type_id are not present
+#    driver_instance_pool_id: '0617-151415-bells2-pool-hh7h6tjm'
+#    instance_pool_id: '0617-151415-bells2-pool-hh7h6tjm'
+
+  dev-cluster-config: &dev-cluster-config
+    new_cluster:
+      <<: *default-cluster-spec
+
+  prod-cluster-config: &prod-cluster-config
+    new_cluster:
+      <<: *default-cluster-spec
+
+# Databricks Jobs definitions
+environments:
+  dev:
+    strict_path_adjustment_policy: true
+    jobs:
+      - name: 'DEV-home-credit-setup'
+        <<: *dev-cluster-config
+        spark_python_task:
+          python_file: 'file://notebooks/00-setup.py'
+          parameters: []
+  prod:
+    strict_path_adjustment_policy: true
+    jobs:
+      - name: 'PROD-external-featurization'
+        <<: *prod-cluster-config
+        spark_python_task:
+          python_file: 'file://notebooks/external-featurisation.py'
+          parameters: []
+      - name: 'PROD-home-credit-setup'
+        tasks:
+        - task_key: 'setup'
+          <<: *prod-cluster-config
+          spark_python_task:
+            python_file: 'file://notebooks/00-setup.py'
+            parameters: []
+      - name: 'PROD-home-credit-ml-training'
+        tasks:
+        - task_key: 'feature-table-update'
+          <<: *prod-cluster-config
+          spark_python_task:
+            python_file: 'file://notebooks/02-featurisation.py'
+            parameters: []
+        - task_key: 'model-train'
+          <<: *prod-cluster-config
+          depends_on:
+            - task_key: 'feature-table-update'
+          spark_python_task:
+            python_file: 'file://notebooks/04-model-training.py'
+            parameters: []
+        - task_key: 'model-deploy'
+          <<: *prod-cluster-config
+          depends_on:
+            - task_key: 'model-train'
+          spark_python_task:
+            python_file: 'file://notebooks/05-deploy-model.py'
+            parameters: []
+        - task_key: 'generate-monitoring-report'
+          <<: *prod-cluster-config
+          depends_on:
+            - task_key: 'model-deploy'
+          spark_python_task:
+            python_file: 'file://notebooks/06-monitoring-drift.py'
+            parameters: []
